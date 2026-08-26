@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "captioning"
+version = "0.1.0"
+description = "A step-by-step tutorial implementation of a baseline image captioning system"
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Install in editable mode so that `import captioning` works from anywhere:
+#   pip install -e .

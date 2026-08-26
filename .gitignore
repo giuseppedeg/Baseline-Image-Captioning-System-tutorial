@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# The five-row sample under data/ is versioned so that the pipeline can be run
+# before a real corpus is available; see data/README.md for the unresolved
+# licensing question. A real corpus is not versioned - add its directory here.
+data/*_processed.csv
+
+# Experiment outputs
+artifacts/
+runs/
+*.pt
+*.ckpt
+
+.ipynb_checkpoints/
+.DS_Store

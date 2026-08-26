@@ -1,0 +1,122 @@
+# ---------------------------------------------------------------------------
+# Stage 1 - training a captioning decoder from scratch on a frozen encoder.
+#
+# The preprocessing entry points read only `data` and `tokenizer`;
+# scripts/train_stage1.py reads all five sections.
+# ---------------------------------------------------------------------------
+
+data:
+  # Root directory against which the CSV `Path` column is resolved.
+  image_root: data
+
+  # The corpus is assumed to be split upstream. Point each field at the
+  # corresponding CSV. `prepare_captions.py` writes the *_processed.csv files.
+  train_csv: data/train_processed.csv
+  val_csv: data/val_processed.csv
+  test_csv: null
+
+  # Map the column names of your corpus onto the names used internally.
+  # Change these here rather than renaming columns in the source data.
+  columns:
+    image_id: ID
+    image_path: Path
+    name: name
+    century: century
+    caption: caption
+
+  # Which column supervises the decoder. `caption_grounded` is produced by
+  # scripts/prepare_captions.py and is the default target; `caption_raw`
+  # preserves the original text and is used for evaluation and inspection.
+  # See docs/01_problem_formulation.md for why these differ.
+  caption_field: caption_grounded
+
+  image_size: 224
+  # Pixel statistics. Must match the pre-training of the encoder in use:
+  # `imagenet` for torchvision/timm backbones, `clip` for CLIP-derived ones.
+  normalization: imagenet
+
+  max_caption_length: 64
+
+  # Sentinel values in the `century` column that denote "unknown" rather than
+  # an actual century. They are decoded to None, not to a numeric class.
+  century_unknown_values: [-1]
+
+  # Fail fast if the CSV references images that are absent from image_root.
+  verify_paths: true
+
+tokenizer:
+  # `word` exposes the out-of-vocabulary problem directly; `bpe` removes it.
+  # docs/01_problem_formulation.md asks you to train both and compare.
+  kind: word
+  vocab_size: 8000
+  min_frequency: 2
+  lowercase: true
+  path: artifacts/tokenizer
+
+seed: 1234
+
+model:
+  encoder:
+    # torchvision: resnet18 / resnet34 / resnet50 / resnet101
+    # timm:        vit_base_patch16_224, convnext_tiny, ...
+    name: resnet50
+    source: torchvision
+    pretrained: true
+    # Stage 1 trains the decoder only. Stage 2 revisits this.
+    freeze: true
+    trainable_stages: 0
+
+  decoder:
+    # `lstm` reproduces Show, Attend and Tell (2015) and makes the recurrence
+    # visible; `transformer` is the architecture everything since is built on.
+    # Train both: the comparison is the point of this stage.
+    kind: transformer
+    d_model: 512
+    dropout: 0.1
+    # Transformer only
+    n_heads: 8
+    n_layers: 3
+    ffn_dim: 2048
+    # LSTM only
+    hidden_dim: 512
+    attention_dim: 512
+    tie_weights: false
+
+training:
+  epochs: 20
+  batch_size: 32
+  num_workers: 4
+
+  optimizer:
+    name: adamw
+    lr: 3.0e-4
+    weight_decay: 0.01
+    betas: [0.9, 0.98]
+    # Used from Stage 2, once encoder parameters start receiving gradients.
+    encoder_lr: null
+
+  scheduler:
+    warmup_steps: 500
+    min_lr_factor: 0.05
+
+  # Label smoothing matters more here than in classification: the reference
+  # caption is one of many acceptable sentences, so a target distribution that
+  # places all mass on it is factually wrong.
+  label_smoothing: 0.1
+  grad_clip: 1.0
+  amp: true
+  output_dir: runs/stage1
+  early_stopping_patience: 5
+  log_every: 25
+
+inference:
+  # greedy | beam | nucleus
+  strategy: beam
+  beam_size: 3
+  # Beam search without length normalisation prefers short captions, because
+  # every additional token multiplies in a probability below one.
+  length_penalty: 0.7
+  max_new_tokens: 48
+  # Sampling parameters, used only by `nucleus`.
+  temperature: 1.0
+  top_p: 0.9
